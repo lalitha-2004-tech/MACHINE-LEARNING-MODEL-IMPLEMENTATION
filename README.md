@@ -14,7 +14,7 @@
 
 *DESCRIPTION*:
 
-##NAME OF THE PROJECT: Machine learning model implementation using python.
+##*NAME OF THE PROJECT*: Machine learning model implementation using python.
 
 Implementing a machine learning model in Python using scikit-learn (sklearn) involves a consistent and streamlined process, regardless of the specific algorithm chosen. This consistency is a key feature of scikit-learn, simplifying the workflow for various machine learning tasks like classification, regression, clustering, and dimensionality reduction.
 
