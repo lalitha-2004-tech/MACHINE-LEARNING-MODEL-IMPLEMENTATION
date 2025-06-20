@@ -1,0 +1,81 @@
+# 1. Setup & Imports
+import pandas as pd
+import numpy as np
+import zipfile
+import requests
+from io import BytesIO
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
+import joblib
+
+# 2. Download & Unpack Enron-Spam CSV
+url = "https://github.com/MWiechmann/enron_spam_data/raw/master/enron_spam_data.zip"
+r = requests.get(url)
+print(r.status_code, r.headers.get("Content-Type"))
+z = zipfile.ZipFile(BytesIO(r.content))
+z.extractall()
+print("Extracted:", z.namelist())
+# 3. Load Data
+df = pd.read_csv("enron_spam_data.csv")
+print(df['Spam/Ham'].value_counts())
+df['label'] = (df['Spam/Ham'] == 'spam').astype(int)
+df['text'] = (df['Subject'].fillna('') + ' ' + df['Message'].fillna('')).str.lower()
+
+# 4. Train/Test Split
+X_train, X_test, y_train, y_test = train_test_split(
+    df['text'], df['label'], test_size=0.2, random_state=42, stratify=df['label']
+)
+
+# 5. TF‑IDF Feature Extraction
+tfidf = TfidfVectorizer(stop_words='english', max_df=0.95, min_df=5, ngram_range=(1,2))
+X_train_tfidf = tfidf.fit_transform(X_train)
+X_test_tfidf = tfidf.transform(X_test)
+
+# 6. Train Multiple Models
+models = {
+    'NaiveBayes': MultinomialNB(alpha=0.2),
+    'LogisticRegression': LogisticRegression(max_iter=1000),
+    'RandomForest': RandomForestClassifier(n_estimators=100, random_state=42)
+}
+results = {}
+for name, clf in models.items():
+    clf.fit(X_train_tfidf, y_train)
+    preds = clf.predict(X_test_tfidf)
+    probs = clf.predict_proba(X_test_tfidf)[:,1]
+    results[name] = {
+        'acc': accuracy_score(y_test, preds),
+        'roc_auc': roc_auc_score(y_test, probs),
+        'report': classification_report(y_test, preds, output_dict=True),
+        'conf_mat': confusion_matrix(y_test, preds)
+    }
+
+# 7. Show Results
+for name, res in results.items():
+    print(f"=== {name} ===")
+    print(f"Accuracy: {res['acc']:.4f} — ROC AUC: {res['roc_auc']:.4f}")
+    print(pd.DataFrame(res['report']).T[['precision','recall','f1-score']])
+    print("Confusion Matrix:\n", res['conf_mat'], "\n")
+
+# 8. Hyperparameter Tuning (Logistic Regression example)
+param_grid = {'C': [0.01, 0.1, 1, 10]}
+grid = GridSearchCV(LogisticRegression(max_iter=1000), param_grid, cv=5, scoring='roc_auc')
+grid.fit(X_train_tfidf, y_train)
+print("Best LR params:", grid.best_params_)
+best = grid.best_estimator_
+preds = best.predict(X_test_tfidf)
+probs = best.predict_proba(X_test_tfidf)[:,1]
+print("Tuned LR — Acc:", accuracy_score(y_test, preds), "ROC AUC:", roc_auc_score(y_test, probs))
+
+# 9. Save Model & Vectorizer
+joblib.dump((tfidf, best), 'spam_clf.pkl')
+print("Saved model as spam_clf.pkl")
+
+# 10. Quick Reload & Predict
+tf, mdl = joblib.load('spam_clf.pkl')
+sample = ["WINNER! You've won a $1,000,000 prize. Reply now!"]
+X_s = tf.transform(sample)
+print("Prediction:", mdl.predict(X_s)[0], "| Spam probability:", mdl.predict_proba(X_s)[0][1])
