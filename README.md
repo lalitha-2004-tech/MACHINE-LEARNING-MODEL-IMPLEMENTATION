@@ -35,7 +35,6 @@ This standardized API for training and prediction makes scikit-learn an accessib
 LIBRARIES AND TOOLS USED:-
 
 1.Pandas:
-
 2.Numpy:
 
 3.Requests:
